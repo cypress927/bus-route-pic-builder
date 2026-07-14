@@ -64,6 +64,33 @@
       padding: 0 18px 96px;
     }
 
+    .app-footer {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 22px 12px 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .app-footer a {
+      border-radius: 5px;
+      color: var(--brand);
+      font-weight: 650;
+      text-decoration: none;
+    }
+
+    .app-footer a:hover {
+      text-decoration: underline;
+    }
+
+    .app-footer a:focus-visible {
+      outline: 3px solid rgba(31, 151, 91, .2);
+      outline-offset: 3px;
+    }
+
     .topbar {
       position: sticky;
       top: 0;
@@ -1007,6 +1034,10 @@
         </details>
       </section>
     </main>
+    <footer class="app-footer" aria-label="联系方式">
+      <span>联系作者：</span>
+      <a href="mailto:zh.junbai@icloud.com">zh.junbai@icloud.com</a>
+    </footer>
   </div>
 
   <div class="mobile-actions">
@@ -1048,6 +1079,7 @@
     var STORAGE_KEY = "bus-route-sign-maker-v1";
     var SVG_WIDTH = 1536;
     var SVG_HEIGHT = 429;
+    var CONTACT_EMAIL = "zh.junbai@icloud.com";
     var svgInstanceCounter = 0;
     var FONT_FAMILY = "'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','Source Han Sans SC',sans-serif";
     var FONT_FIELDS = ["routeFont", "sidebarFont", "stationFont", "noteFont"];
@@ -1335,6 +1367,7 @@
       p.push('<text x="238" y="353" font-family="' + sidebarFont + '" font-size="13.5" fill="#ffffff" text-anchor="end">' + escapeXml(data.startTime) + '</text>');
       p.push('<text x="24" y="385" font-family="' + sidebarFont + '" font-size="' + endNameSize.toFixed(1) + '" fill="#ffffff">' + escapeXml(data.endName) + '</text>');
       p.push('<text x="238" y="385" font-family="' + sidebarFont + '" font-size="13.5" fill="#ffffff" text-anchor="end">' + escapeXml(data.endTime) + '</text>');
+      p.push('<text x="24" y="414" font-family="' + noteFont + '" font-size="9.5" fill="#ffffff" opacity=".76">联系：' + escapeXml(CONTACT_EMAIL) + '</text>');
 
       if (data.showLegend) {
         p.push('<circle cx="380" cy="405" r="4" fill="' + outColor + '"/><text x="389" y="409" font-family="' + noteFont + '" font-size="10.5" fill="' + outColor + '">去程单向</text>');
@@ -1546,6 +1579,114 @@
       return (clean || "公交线路图") + ".png";
     }
 
+    function asciiBytes(value, nullTerminated) {
+      var text = String(value || "").replace(/[^\x20-\x7e]/g, "?");
+      var bytes = new Uint8Array(text.length + (nullTerminated ? 1 : 0));
+      for (var i = 0; i < text.length; i += 1) bytes[i] = text.charCodeAt(i);
+      return bytes;
+    }
+
+    function pngCrc32(bytes) {
+      var crc = 0xffffffff;
+      for (var i = 0; i < bytes.length; i += 1) {
+        crc ^= bytes[i];
+        for (var bit = 0; bit < 8; bit += 1) {
+          crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+        }
+      }
+      return (crc ^ 0xffffffff) >>> 0;
+    }
+
+    function createPngChunk(type, data) {
+      var chunk = new Uint8Array(12 + data.length);
+      var view = new DataView(chunk.buffer);
+      view.setUint32(0, data.length, false);
+      for (var i = 0; i < 4; i += 1) chunk[4 + i] = type.charCodeAt(i);
+      chunk.set(data, 8);
+      view.setUint32(8 + data.length, pngCrc32(chunk.subarray(4, 8 + data.length)), false);
+      return chunk;
+    }
+
+    function createExifContactProfile(email) {
+      var description = asciiBytes("Contact: " + email, true);
+      var artist = asciiBytes(email, true);
+      var entryCount = 2;
+      var dataOffset = 8 + 2 + entryCount * 12 + 4;
+      var profile = new Uint8Array(dataOffset + description.length + artist.length);
+      var view = new DataView(profile.buffer);
+
+      profile[0] = 0x49;
+      profile[1] = 0x49;
+      view.setUint16(2, 42, true);
+      view.setUint32(4, 8, true);
+      view.setUint16(8, entryCount, true);
+
+      function setAsciiEntry(offset, tag, value, valueOffset) {
+        view.setUint16(offset, tag, true);
+        view.setUint16(offset + 2, 2, true);
+        view.setUint32(offset + 4, value.length, true);
+        view.setUint32(offset + 8, valueOffset, true);
+      }
+
+      setAsciiEntry(10, 0x010e, description, dataOffset);
+      setAsciiEntry(22, 0x013b, artist, dataOffset + description.length);
+      view.setUint32(34, 0, true);
+      profile.set(description, dataOffset);
+      profile.set(artist, dataOffset + description.length);
+      return profile;
+    }
+
+    function createPngContactText(email) {
+      var keyword = asciiBytes("Contact", false);
+      var value = asciiBytes(email, false);
+      var textData = new Uint8Array(keyword.length + 1 + value.length);
+      textData.set(keyword, 0);
+      textData[keyword.length] = 0;
+      textData.set(value, keyword.length + 1);
+      return textData;
+    }
+
+    function addContactMetadataToPng(blob) {
+      return blob.arrayBuffer().then(function (buffer) {
+        var png = new Uint8Array(buffer);
+        var signature = [137, 80, 78, 71, 13, 10, 26, 10];
+        if (png.length < 33 || signature.some(function (value, index) { return png[index] !== value; })) {
+          throw new Error("Invalid PNG signature");
+        }
+
+        var view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+        var exifChunk = createPngChunk("eXIf", createExifContactProfile(CONTACT_EMAIL));
+        var textChunk = createPngChunk("tEXt", createPngContactText(CONTACT_EMAIL));
+        var outputParts = [png.subarray(0, 8)];
+        var offset = 8;
+        var inserted = false;
+        var sawIdat = false;
+        var sawIend = false;
+
+        while (offset + 12 <= png.length) {
+          var length = view.getUint32(offset, false);
+          var chunkEnd = offset + 12 + length;
+          if (chunkEnd > png.length) throw new Error("Invalid PNG chunk length");
+          var type = String.fromCharCode(png[offset + 4], png[offset + 5], png[offset + 6], png[offset + 7]);
+          if (offset === 8 && type !== "IHDR") throw new Error("Invalid PNG header");
+          if (type === "IDAT" && !inserted) {
+            outputParts.push(exifChunk, textChunk);
+            inserted = true;
+            sawIdat = true;
+          }
+          if (type !== "eXIf") outputParts.push(png.subarray(offset, chunkEnd));
+          if (type === "IEND") {
+            sawIend = true;
+            if (chunkEnd !== png.length) throw new Error("Unexpected PNG trailing data");
+          }
+          offset = chunkEnd;
+        }
+
+        if (!inserted || !sawIdat || !sawIend || offset !== png.length) throw new Error("Incomplete PNG data");
+        return new Blob(outputParts, { type: "image/png" });
+      });
+    }
+
     function resetExportDialog() {
       exportImage.hidden = true;
       exportImage.removeAttribute("src");
@@ -1564,7 +1705,7 @@
       saveImageLink.href = exportObjectUrl;
       saveImageLink.download = safeFilename(state.routeName);
       saveImageLink.hidden = false;
-      exportStatus.textContent = "已生成 " + pixelWidth + " × " + pixelHeight + " PNG。";
+      exportStatus.textContent = "已生成 " + pixelWidth + " × " + pixelHeight + " PNG，已写入联系邮箱。";
       mobileSaveHint.hidden = false;
 
       try {
@@ -1624,7 +1765,11 @@
               exportStatus.textContent = "生成失败，请把清晰度调低后重试。";
               return;
             }
-            finishExport(blob, pixelWidth, pixelHeight);
+            addContactMetadataToPng(blob).then(function (taggedBlob) {
+              finishExport(taggedBlob, pixelWidth, pixelHeight);
+            }).catch(function () {
+              exportStatus.textContent = "生成失败：未能写入联系邮箱，请使用最新版浏览器重试。";
+            });
           }, "image/png");
         } catch (error) {
           exportStatus.textContent = "生成失败，请把清晰度调低后重试。";
