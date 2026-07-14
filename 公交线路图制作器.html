@@ -463,6 +463,39 @@
       font-size: 14px;
     }
 
+    .font-picker {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 68px;
+      gap: 7px;
+    }
+
+    .font-list-select {
+      width: 68px;
+      min-height: 44px;
+      padding: 8px 7px;
+      border: 1px solid #d5e0d9;
+      border-radius: 11px;
+      outline: none;
+      color: #405148;
+      background: #fbfdfc;
+      font-size: 13px;
+      font-weight: 650;
+      cursor: pointer;
+    }
+
+    .font-list-select:focus {
+      border-color: #42a773;
+      background: #fff;
+      box-shadow: 0 0 0 4px rgba(31, 151, 91, .11);
+    }
+
+    .font-list-select option {
+      color: var(--ink);
+      background: #fff;
+      font-size: 14px;
+      font-weight: 400;
+    }
+
     .check-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -917,23 +950,35 @@
               </div>
               <div class="field">
                 <label for="routeFont">线路名称字体</label>
-                <input class="control font-control" id="routeFont" data-field="routeFont" data-font-control type="text" list="systemFontOptions" maxlength="100" autocomplete="off" spellcheck="false">
+                <div class="font-picker">
+                  <input class="control font-control" id="routeFont" data-field="routeFont" data-font-control type="text" list="systemFontOptions" maxlength="100" autocomplete="off" spellcheck="false">
+                  <select class="font-list-select" data-font-list-for="routeFont" aria-label="展开线路名称全部字体" title="展开全部字体"><option value="">列表</option></select>
+                </div>
               </div>
               <div class="field">
                 <label for="sidebarFont">左侧信息字体</label>
-                <input class="control font-control" id="sidebarFont" data-field="sidebarFont" data-font-control type="text" list="systemFontOptions" maxlength="100" autocomplete="off" spellcheck="false">
+                <div class="font-picker">
+                  <input class="control font-control" id="sidebarFont" data-field="sidebarFont" data-font-control type="text" list="systemFontOptions" maxlength="100" autocomplete="off" spellcheck="false">
+                  <select class="font-list-select" data-font-list-for="sidebarFont" aria-label="展开左侧信息全部字体" title="展开全部字体"><option value="">列表</option></select>
+                </div>
               </div>
               <div class="field">
                 <label for="stationFont">站名字体</label>
-                <input class="control font-control" id="stationFont" data-field="stationFont" data-font-control type="text" list="systemFontOptions" maxlength="100" autocomplete="off" spellcheck="false">
+                <div class="font-picker">
+                  <input class="control font-control" id="stationFont" data-field="stationFont" data-font-control type="text" list="systemFontOptions" maxlength="100" autocomplete="off" spellcheck="false">
+                  <select class="font-list-select" data-font-list-for="stationFont" aria-label="展开站名全部字体" title="展开全部字体"><option value="">列表</option></select>
+                </div>
               </div>
               <div class="field">
                 <label for="noteFont">说明文字字体</label>
-                <input class="control font-control" id="noteFont" data-field="noteFont" data-font-control type="text" list="systemFontOptions" maxlength="100" autocomplete="off" spellcheck="false">
+                <div class="font-picker">
+                  <input class="control font-control" id="noteFont" data-field="noteFont" data-font-control type="text" list="systemFontOptions" maxlength="100" autocomplete="off" spellcheck="false">
+                  <select class="font-list-select" data-font-list-for="noteFont" aria-label="展开说明文字全部字体" title="展开全部字体"><option value="">列表</option></select>
+                </div>
               </div>
               <datalist id="systemFontOptions"></datalist>
               <div class="field field-full">
-                <p class="helper">点击“读取本机字体”可加载桌面版 Chrome／Edge 允许访问的完整字体列表；直接打开文件或浏览器不支持时，仍可选择常用字体或输入字体名称。字体不会上传。</p>
+                <p class="helper">输入框可搜索或填写字体名称，右侧“列表”可展开全部选项。点击“读取本机字体”可加载桌面版 Chrome／Edge 允许访问的完整字体列表；字体不会上传。</p>
               </div>
               <div class="field field-full">
                 <label for="fontScale">站名字号</label>
@@ -1323,34 +1368,54 @@
 
     function populateSystemFontOptions(fontFamilies) {
       var seen = Object.create(null);
-      var fragment = document.createDocumentFragment();
+      var availableFonts = [];
 
-      function appendOption(value, label) {
+      function collectFont(value, label) {
         var name = cleanFontName(value);
         if (!name) return;
         var key = name.toLocaleLowerCase();
         if (seen[key]) return;
         seen[key] = true;
-        var option = document.createElement("option");
-        option.value = name;
-        if (label && label !== name) option.label = label;
-        fragment.appendChild(option);
+        availableFonts.push({ value: name, label: label || name });
       }
 
       COMMON_SYSTEM_FONTS.forEach(function (item) {
-        appendOption(item.value, item.label);
+        collectFont(item.value, item.label);
       });
       FONT_FIELDS.forEach(function (key) {
-        appendOption(state[key], "当前选择");
+        collectFont(state[key], "当前选择");
       });
       (fontFamilies || []).slice().sort(function (a, b) {
         return String(a).localeCompare(String(b), "zh-CN", { numeric: true, sensitivity: "base" });
       }).forEach(function (family) {
-        appendOption(family, "");
+        collectFont(family, "");
       });
 
+      var fragment = document.createDocumentFragment();
+      availableFonts.forEach(function (font) {
+        var option = document.createElement("option");
+        option.value = font.value;
+        if (font.label && font.label !== font.value) option.label = font.label;
+        fragment.appendChild(option);
+      });
       while (systemFontOptions.firstChild) systemFontOptions.removeChild(systemFontOptions.firstChild);
       systemFontOptions.appendChild(fragment);
+
+      document.querySelectorAll("[data-font-list-for]").forEach(function (select) {
+        while (select.firstChild) select.removeChild(select.firstChild);
+        var placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "列表";
+        select.appendChild(placeholder);
+        availableFonts.forEach(function (font) {
+          var option = document.createElement("option");
+          option.value = font.value;
+          option.textContent = font.label && font.label !== font.value ? font.label + " · " + font.value : font.value;
+          option.style.fontFamily = fontFamily(font.value);
+          select.appendChild(option);
+        });
+        select.selectedIndex = 0;
+      });
     }
 
     function updateFontControlStyles() {
@@ -1384,7 +1449,7 @@
         }
         populateSystemFontOptions(families);
         loadSystemFontsButton.textContent = "重新读取本机字体";
-        fontStatus.textContent = "已读取 " + families.length + " 个系统字体，可在四个字体框中搜索选择。";
+        fontStatus.textContent = "已读取 " + families.length + " 个系统字体，可搜索或从右侧列表选择。";
         showToast("系统字体列表已加载");
       }).catch(function (error) {
         if (error && error.name === "NotAllowedError") {
@@ -1589,6 +1654,18 @@
     });
 
     loadSystemFontsButton.addEventListener("click", loadSystemFonts);
+
+    document.querySelectorAll("[data-font-list-for]").forEach(function (select) {
+      select.addEventListener("change", function () {
+        if (!select.value) return;
+        var control = document.getElementById(select.getAttribute("data-font-list-for"));
+        if (!control) return;
+        control.value = select.value;
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+        select.selectedIndex = 0;
+        control.focus();
+      });
+    });
 
     document.querySelectorAll("[data-color-text]").forEach(function (control) {
       control.addEventListener("change", function () {
