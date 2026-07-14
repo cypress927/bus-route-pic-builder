@@ -1048,6 +1048,7 @@
     var STORAGE_KEY = "bus-route-sign-maker-v1";
     var SVG_WIDTH = 1536;
     var SVG_HEIGHT = 429;
+    var svgInstanceCounter = 0;
     var FONT_FAMILY = "'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','Source Han Sans SC',sans-serif";
     var FONT_FIELDS = ["routeFont", "sidebarFont", "stationFont", "noteFont"];
     var LEGACY_FONT_VALUES = {
@@ -1279,9 +1280,9 @@
       var inColor = validColor(data.inboundColor, "#d92543");
       var darkTheme = shadeColor(theme, -24);
       var stops = parseStations(data.stations);
-      var lineY = 75;
+      var lineY = 75.3;
       var firstStopX = 301;
-      var lastStopX = 1486;
+      var lastStopX = 1485.5;
       var count = Math.max(1, stops.length);
       var step = stops.length > 1 ? (lastStopX - firstStopX) / (stops.length - 1) : (lastStopX - firstStopX);
       var fontScale = Math.max(.8, Math.min(1.25, Number(data.fontScale || 100) / 100));
@@ -1292,11 +1293,16 @@
       var sidebarFont = escapeXml(fontFamily(data.sidebarFont));
       var stationFont = escapeXml(fontFamily(data.stationFont));
       var noteFont = escapeXml(fontFamily(data.noteFont));
+      var svgInstanceId = ++svgInstanceCounter;
+      var backgroundId = "route-background-" + svgInstanceId;
+      var edgeRepairId = "background-edge-repair-" + svgInstanceId;
       var p = [];
 
       p.push('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="' + SVG_WIDTH + '" height="' + SVG_HEIGHT + '" viewBox="0 0 ' + SVG_WIDTH + ' ' + SVG_HEIGHT + '" role="img" aria-label="' + escapeXml(data.routeName || "公交线路图") + '">');
-      p.push('<image x="0" y="0" width="' + SVG_WIDTH + '" height="' + SVG_HEIGHT + '" preserveAspectRatio="none" href="' + BACKGROUND_DATA + '"/>');
-      p.push('<circle cx="1486" cy="' + lineY + '" r="6.6" fill="' + inColor + '"/>');
+      p.push('<defs><clipPath id="' + edgeRepairId + '"><rect x="1526.5" y="0" width="5" height="' + SVG_HEIGHT + '"/></clipPath></defs>');
+      p.push('<image id="' + backgroundId + '" x="0" y="0" width="' + SVG_WIDTH + '" height="' + SVG_HEIGHT + '" preserveAspectRatio="none" href="' + BACKGROUND_DATA + '"/>');
+      p.push('<g clip-path="url(#' + edgeRepairId + ')"><use href="#' + backgroundId + '" xlink:href="#' + backgroundId + '" transform="translate(6 0)"/></g>');
+      p.push('<circle cx="' + lastStopX + '" cy="' + lineY + '" r="7.4" fill="' + inColor + '"/>');
 
       if (stops.length) {
         stops.forEach(function (stop, index) {
@@ -1505,7 +1511,7 @@
       window.requestAnimationFrame(function () {
         var svg = buildSvg(state);
         previewMount.innerHTML = svg;
-        if (fullPreviewDialog.open) fullPreview.innerHTML = svg;
+        if (fullPreviewDialog.open) fullPreview.innerHTML = buildSvg(state);
         var count = parseStations(state.stations).length;
         stationCount.textContent = count + " 个站点";
         updateRangeLabels();
