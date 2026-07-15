@@ -1367,8 +1367,6 @@
       p.push('<text x="238" y="353" font-family="' + sidebarFont + '" font-size="13.5" fill="#ffffff" text-anchor="end">' + escapeXml(data.startTime) + '</text>');
       p.push('<text x="24" y="385" font-family="' + sidebarFont + '" font-size="' + endNameSize.toFixed(1) + '" fill="#ffffff">' + escapeXml(data.endName) + '</text>');
       p.push('<text x="238" y="385" font-family="' + sidebarFont + '" font-size="13.5" fill="#ffffff" text-anchor="end">' + escapeXml(data.endTime) + '</text>');
-      p.push('<text x="24" y="414" font-family="' + noteFont + '" font-size="9.5" fill="#ffffff" opacity=".76">联系：' + escapeXml(CONTACT_EMAIL) + '</text>');
-
       if (data.showLegend) {
         p.push('<circle cx="380" cy="405" r="4" fill="' + outColor + '"/><text x="389" y="409" font-family="' + noteFont + '" font-size="10.5" fill="' + outColor + '">去程单向</text>');
         p.push('<circle cx="460" cy="405" r="4" fill="' + inColor + '"/><text x="469" y="409" font-family="' + noteFont + '" font-size="10.5" fill="' + inColor + '">返程单向</text>');
@@ -1636,17 +1634,7 @@
       return profile;
     }
 
-    function createPngContactText(email) {
-      var keyword = asciiBytes("Contact", false);
-      var value = asciiBytes(email, false);
-      var textData = new Uint8Array(keyword.length + 1 + value.length);
-      textData.set(keyword, 0);
-      textData[keyword.length] = 0;
-      textData.set(value, keyword.length + 1);
-      return textData;
-    }
-
-    function addContactMetadataToPng(blob) {
+    function addContactExifToPng(blob) {
       return blob.arrayBuffer().then(function (buffer) {
         var png = new Uint8Array(buffer);
         var signature = [137, 80, 78, 71, 13, 10, 26, 10];
@@ -1656,7 +1644,6 @@
 
         var view = new DataView(png.buffer, png.byteOffset, png.byteLength);
         var exifChunk = createPngChunk("eXIf", createExifContactProfile(CONTACT_EMAIL));
-        var textChunk = createPngChunk("tEXt", createPngContactText(CONTACT_EMAIL));
         var outputParts = [png.subarray(0, 8)];
         var offset = 8;
         var inserted = false;
@@ -1670,7 +1657,7 @@
           var type = String.fromCharCode(png[offset + 4], png[offset + 5], png[offset + 6], png[offset + 7]);
           if (offset === 8 && type !== "IHDR") throw new Error("Invalid PNG header");
           if (type === "IDAT" && !inserted) {
-            outputParts.push(exifChunk, textChunk);
+            outputParts.push(exifChunk);
             inserted = true;
             sawIdat = true;
           }
@@ -1705,7 +1692,7 @@
       saveImageLink.href = exportObjectUrl;
       saveImageLink.download = safeFilename(state.routeName);
       saveImageLink.hidden = false;
-      exportStatus.textContent = "已生成 " + pixelWidth + " × " + pixelHeight + " PNG，已写入联系邮箱。";
+      exportStatus.textContent = "已生成 " + pixelWidth + " × " + pixelHeight + " PNG，已写入 EXIF 联系信息。";
       mobileSaveHint.hidden = false;
 
       try {
@@ -1765,10 +1752,10 @@
               exportStatus.textContent = "生成失败，请把清晰度调低后重试。";
               return;
             }
-            addContactMetadataToPng(blob).then(function (taggedBlob) {
+            addContactExifToPng(blob).then(function (taggedBlob) {
               finishExport(taggedBlob, pixelWidth, pixelHeight);
             }).catch(function () {
-              exportStatus.textContent = "生成失败：未能写入联系邮箱，请使用最新版浏览器重试。";
+              exportStatus.textContent = "生成失败：未能写入 EXIF 联系信息，请使用最新版浏览器重试。";
             });
           }, "image/png");
         } catch (error) {
